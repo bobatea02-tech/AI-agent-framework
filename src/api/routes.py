@@ -15,7 +15,7 @@ from src.executors.llm_executor import LLMExecutor
 from src.executors.ocr_executor import OCRExecutor
 from src.executors.rag_executor import RAGRetrieverExecutor
 from src.executors.validation_executor import ValidationExecutor
-from src.kafka.producer import WorkflowProducer
+from src.kafka.producer import default_producer
 
 
 app = FastAPI(title="AI Agent Framework", version="0.2.0")
@@ -40,11 +40,7 @@ def _build_orchestrator() -> Orchestrator:
 
 
 orchestrator = _build_orchestrator()
-
-# Kafka producer for async workflows
-_kafka_bootstrap = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
-_kafka_topic = os.getenv("KAFKA_WORKFLOW_TOPIC", "workflows")
-producer = WorkflowProducer(brokers=_kafka_bootstrap, topic=_kafka_topic)
+producer = default_producer()
 
 
 @app.post("/workflows/execute", response_model=WorkflowResponse)
