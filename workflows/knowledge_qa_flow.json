@@ -1,0 +1,20 @@
+{
+  "workflow_id": "knowledge_qa_v1",
+  "tasks": [
+    {
+      "id": "retrieve",
+      "executor": "RAGRetrieverExecutor",
+      "inputs": { "query": "${__input__.query}" }
+    },
+    {
+      "id": "answer",
+      "executor": "LLMExecutor",
+      "inputs": {
+        "context": "${retrieve}",
+        "query": "${__input__.query}"
+      },
+      "depends_on": ["retrieve"]
+    }
+  ]
+}
+

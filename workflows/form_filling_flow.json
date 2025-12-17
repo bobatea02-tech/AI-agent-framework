@@ -1,0 +1,20 @@
+{
+  "workflow_id": "form_filling_v1",
+  "tasks": [
+    {
+      "id": "extract_text",
+      "executor": "OCRExecutor",
+      "inputs": { "document": "${__input__.document}" },
+      "retry": 3,
+      "timeout": 30
+    },
+    {
+      "id": "validate_fields",
+      "executor": "ValidationExecutor",
+      "inputs": { "payload": "${extract_text.text}" },
+      "depends_on": ["extract_text"],
+      "retry": 1
+    }
+  ]
+}
+
