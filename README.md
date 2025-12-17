@@ -153,37 +153,60 @@ print(json.dumps(result, indent=2))
 }
 ```
 
-## Project Structure
+## Project Structure (scaffolded for full brief)
 
 ```
 ai-agent-framework/
 ├── src/
 │   ├── api/
-│   │   └── routes.py          # FastAPI endpoints
+│   │   ├── routes.py              # FastAPI endpoints
+│   │   └── schemas.py             # Pydantic request/response models
 │   ├── core/
-│   │   ├── dag.py             # DAG and TaskNode classes
-│   │   ├── state_machine.py   # StateMachine for tracking task state
-│   │   ├── workflow.py        # Workflow and Task definitions (optional)
-│   │   └── orchestrator.py    # Orchestrator for executing workflows
+│   │   ├── orchestrator.py        # Orchestration engine
+│   │   ├── executor.py            # Base executor interface
+│   │   ├── task_flow.py           # Task flow schema + loader
+│   │   ├── state_manager.py       # Redis-backed state persistence
+│   │   ├── dag.py
+│   │   ├── workflow.py
+│   │   └── state_machine.py
 │   ├── executors/
-│   │   ├── base.py            # BaseExecutor abstract class
-│   │   ├── llm_executor.py    # LLM executor (OpenAI/Ollama)
-│   │   ├── tool_executor.py   # Tool executor (HTTP, Google Search)
-│   │   └── script_executor.py # Script executor (Python)
+│   │   ├── base.py
+│   │   ├── llm_executor.py
+│   │   ├── ocr_executor.py
+│   │   ├── validation_executor.py
+│   │   ├── database_executor.py
+│   │   └── api_caller_executor.py
+│   ├── tools/
+│   │   ├── pdf_reader.py
+│   │   ├── ocr_tool.py
+│   │   ├── llm_client.py
+│   │   └── rag_retriever.py
+│   ├── agents/
+│   │   ├── form_filling_agent.py
+│   │   └── knowledge_qa_agent.py
+│   ├── kafka/
+│   │   ├── consumer.py
+│   │   └── producer.py
+│   ├── airflow/
+│   │   └── dags/agent_workflows.py
+│   ├── utils/
+│   │   ├── logger.py
+│   │   └── metrics.py
 │   ├── memory/
-│   │   └── redis_store.py     # Redis state persistence
+│   │   └── redis_store.py
 │   ├── observability/
-│   │   └── logger.py          # JSON structured logging
-│   └── config.py              # Configuration (Pydantic)
+│   │   └── logger.py
+│   └── config.py
+├── workflows/
+│   ├── form_filling_flow.json
+│   └── knowledge_qa_flow.json
+├── docker-compose.yml
 ├── scripts/
-│   └── demo_state_machine.py  # Demo script showing DAG + StateMachine
+│   └── demo_state_machine.py
 ├── tests/
-│   └── (unit tests TBD)
-├── requirements.txt           # Python dependencies
-├── .gitignore
-├── .env.example              # Environment variables template
+├── requirements.txt
 ├── LICENSE
-└── README.md                 # This file
+└── README.md
 ```
 
 ## Core Concepts

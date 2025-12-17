@@ -1,118 +1,190 @@
-# src/core/orchestrator.py
-import json
+from __future__ import annotations
+
 import logging
 import time
-from typing import Dict, Any, Optional
+from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from typing import Any, Dict, Mapping, Optional
+
+from .dag import DAG, TaskNode
+from .state_machine import StateMachine, TaskState
+from .state_manager import StateManager
+from .task_flow import TaskFlow, TaskDefinition
 
 logger = logging.getLogger(__name__)
 
-class TaskStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMEOUT = "timeout"
 
-class WorkflowState:
-    def __init__(self, workflow_id: str):
-        self.workflow_id = workflow_id
-        self.task_results: Dict[str, Any] = {}
-        self.task_status: Dict[str, TaskStatus] = {}
-        self.task_duration: Dict[str, float] = {}
-        self.started_at = datetime.now()
-    
-    def get_task_output(self, task_id: str) -> Optional[Any]:
-        return self.task_results.get(task_id)
-    
-    def set_task_result(self, task_id: str, result: Any, duration: float):
-        self.task_results[task_id] = result
-        self.task_duration[task_id] = duration
-        self.task_status[task_id] = TaskStatus.SUCCESS
-    
-    def set_task_failed(self, task_id: str):
-        self.task_status[task_id] = TaskStatus.FAILED
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        total_duration = (datetime.now() - self.started_at).total_seconds() * 1000
-        return {
-            "total_duration_ms": total_duration,
-            "task_durations": self.task_duration,
-            "task_statuses": {k: v.value for k, v in self.task_status.items()}
-        }
+@dataclass
+class OrchestratorResult:
+    """Standard result payload returned by the orchestrator."""
+
+    workflow_id: str
+    outputs: Dict[str, Any]
+    metrics: Dict[str, Any]
+    errors: Dict[str, str]
+
 
 class Orchestrator:
-    def __init__(self, executors_map: Dict[str, Any]):
+    """Core orchestration engine for TaskFlow-based workflows.
+
+    Responsibilities:
+    - Parse TaskFlow into a DAG
+    - Use StateMachine to determine runnable tasks
+    - Execute tasks via injected executors with retries
+    - Resolve inputs from prior task outputs (and initial input)
+    - Persist state via StateManager (optional)
+    - Collect execution metrics
+    """
+
+    def __init__(
+        self,
+        executors: Mapping[str, Any],
+        state_manager: Optional[StateManager] = None,
+    ) -> None:
         """
-        Initialize orchestrator with executor implementations
-        
         Args:
-            executors_map: {
-                "llm": LLMExecutor(),
-                "tool": ToolExecutor(),
-                "script": ScriptExecutor(),
-                ...
-            }
+            executors: Mapping from executor name -> executor instance
+                       (e.g. {"LLMExecutor": llm_exec, "OCRExecutor": ocr_exec})
+            state_manager: Optional StateManager for persistence/checkpointing
         """
-        self.executors = executors_map
-    
-    def execute(self, workflow, input_data: Dict[str, Any]) -> WorkflowState:
-        """Execute workflow from start to finish"""
-        
-        logger.info(f"Starting workflow execution: {workflow.name}")
-        state = WorkflowState(workflow.name)
-        
-        # Add initial input to state
-        state.task_results["__input__"] = input_data
-        
-        # Get topologically sorted tasks
-        tasks = workflow.topological_sort()
-        
-        for task in tasks:
-            try:
-                logger.info(f"Executing task: {task.id}")
-                result = self._execute_task(task, state)
-                state.set_task_result(task.id, result, 0)
-            except Exception as e:
-                logger.error(f"Task {task.id} failed: {str(e)}")
-                state.set_task_failed(task.id)
-                raise
-        
-        logger.info(f"Workflow completed: {workflow.name}")
-        return state
-    
-    def _execute_task(self, task, state: WorkflowState) -> Any:
-        """Execute individual task"""
+        self._executors = dict(executors)
+        self._state_manager = state_manager
+
+    # Public API -----------------------------------------------------
+
+    def execute(self, flow: TaskFlow, input_data: Dict[str, Any]) -> OrchestratorResult:
+        """Execute a workflow described by a TaskFlow.
+
+        This is a synchronous, in-process runner suitable as a default
+        orchestrator when Airflow/Celery are not used.
+        """
+        logger.info("Starting workflow %s", flow.workflow_id)
+        started_at = time.time()
+
+        dag, task_index = self._build_dag(flow)
+        sm = StateMachine(dag=dag)
+
+        # Seed initial input into state machine results
+        sm.results["__input__"] = input_data
+
+        task_durations: Dict[str, float] = {}
+        task_statuses: Dict[str, str] = {}
+
+        # Main execution loop: run while there is runnable work
+        while not sm.all_done():
+            runnable = sm.next_runnable()
+            if not runnable:
+                # No runnable tasks but not all done -> deadlock / failure
+                logger.error("No runnable tasks but workflow not complete; breaking")
+                break
+
+            for task_id in runnable:
+                task_def = task_index[task_id]
+                self._run_single_task(task_def, sm, task_durations, task_statuses)
+
+                # Persist state after each task if a manager is configured
+                if self._state_manager:
+                    try:
+                        self._state_manager.save_state(flow.workflow_id, sm.to_dict())
+                    except Exception as e:  # pragma: no cover - defensive
+                        logger.warning("Failed to persist state for %s: %s", flow.workflow_id, e)
+
+        total_duration_ms = (time.time() - started_at) * 1000.0
+        metrics = {
+            "total_duration_ms": total_duration_ms,
+            "task_durations": task_durations,
+            "task_statuses": task_statuses,
+        }
+
+        logger.info("Workflow %s finished in %.2fms", flow.workflow_id, total_duration_ms)
+        return OrchestratorResult(
+            workflow_id=flow.workflow_id,
+            outputs=sm.results,
+            metrics=metrics,
+            errors=sm.errors,
+        )
+
+    # Internal helpers -----------------------------------------------
+
+    def _build_dag(self, flow: TaskFlow) -> tuple[DAG, Dict[str, TaskDefinition]]:
+        """Build a DAG and a quick index from a TaskFlow."""
+        tasks = [TaskNode(id=t.id, type=t.executor, config=t.config, inputs=t.inputs) for t in flow.tasks]
+        edges = flow.as_dag_edges()
+        dag = DAG(tasks=tasks, edges=edges)
+        index = {t.id: t for t in flow.tasks}
+        return dag, index
+
+    def _run_single_task(
+        self,
+        task: TaskDefinition,
+        sm: StateMachine,
+        task_durations: Dict[str, float],
+        task_statuses: Dict[str, str],
+    ) -> None:
+        """Execute one task with retries and basic error handling."""
+        tid = task.id
+        logger.info("Running task %s with executor %s", tid, task.executor)
+
+        if not sm.is_runnable(tid):
+            logger.debug("Task %s is not runnable, skipping for now", tid)
+            return
+
+        sm.mark_running(tid)
+        executor = self._executors.get(task.executor)
+        if executor is None:
+            err = f"No executor registered for '{task.executor}'"
+            logger.error(err)
+            sm.mark_failed(tid, err)
+            task_statuses[tid] = TaskState.FAILED.value
+            return
+
+        attempt = 0
+        last_error: Optional[Exception] = None
         start_time = time.time()
-        
-        # Resolve input references (e.g., ${task_1.output})
-        task_input = self._resolve_inputs(task.inputs, state)
-        
-        # Get executor for this task type
-        executor = self.executors.get(task.type.value)
-        if not executor:
-            raise ValueError(f"No executor found for task type: {task.type}")
-        
-        # Execute task
-        result = executor.execute(task.config, task_input)
-        
-        duration = (time.time() - start_time) * 1000
-        logger.info(f"Task {task.id} completed in {duration:.2f}ms")
-        
-        return result
-    
-    def _resolve_inputs(self, inputs: Dict[str, str], state: WorkflowState) -> Dict[str, Any]:
-        """Resolve input references to actual values"""
-        resolved = {}
-        
+
+        while attempt <= task.retry:
+            attempt += 1
+            try:
+                resolved_inputs = self._resolve_inputs(task.inputs, sm.results)
+                result = executor.execute(task.config, resolved_inputs)
+                duration_ms = (time.time() - start_time) * 1000.0
+                task_durations[tid] = duration_ms
+                sm.mark_succeeded(tid, result)
+                task_statuses[tid] = TaskState.SUCCEEDED.value
+                logger.info("Task %s succeeded in %.2fms (attempt %d)", tid, duration_ms, attempt)
+                return
+            except Exception as e:  # pragma: no cover - runtime behavior
+                last_error = e
+                logger.warning("Task %s failed on attempt %d: %s", tid, attempt, e)
+                if attempt > task.retry:
+                    break
+                # Simple backoff: sleep proportional to attempt number
+                time.sleep(min(1.0 * attempt, 5.0))
+
+        # If we arrive here, all retries failed
+        duration_ms = (time.time() - start_time) * 1000.0
+        task_durations[tid] = duration_ms
+        sm.mark_failed(tid, last_error or "unknown error")
+        task_statuses[tid] = TaskState.FAILED.value
+        logger.error("Task %s ultimately failed after %.2fms", tid, duration_ms)
+
+    def _resolve_inputs(self, inputs: Dict[str, Any], results: Dict[str, Any]) -> Dict[str, Any]:
+        """Resolve `${task_id.output}`-style references from previous results.
+
+        The left part before the dot is treated as a task id. The right part
+        is treated as a key within that task's result (if the result is a dict).
+        A special `__input__` task id refers to the original workflow input.
+        """
+        resolved: Dict[str, Any] = {}
         for key, value in inputs.items():
             if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-                # Parse reference: ${task_id.output}
-                ref = value[2:-1]  # Remove ${ and }
-                task_id, var = ref.split(".")
-                resolved[key] = state.get_task_output(task_id)
+                ref = value[2:-1]  # strip ${ }
+                task_id, _, field = ref.partition(".")
+                source = results.get(task_id)
+                if isinstance(source, dict) and field:
+                    resolved[key] = source.get(field)
+                else:
+                    resolved[key] = source
             else:
                 resolved[key] = value
-        
         return resolved

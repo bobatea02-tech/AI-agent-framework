@@ -1,81 +1,79 @@
-# src/api/routes.py
+from __future__ import annotations
+
+import os
+from typing import Any, Dict
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any, List
-import json
 
-from src.core.workflow import Workflow, Task, TaskType
+from src.api.schemas import WorkflowRequest, WorkflowResponse
 from src.core.orchestrator import Orchestrator
+from src.core.state_manager import StateManager
+from src.core.task_flow import TaskFlow
+from src.executors.api_caller_executor import APICallerExecutor
+from src.executors.database_executor import DatabaseExecutor
 from src.executors.llm_executor import LLMExecutor
-from src.executors.tool_executor import ToolExecutor
-from src.executors.script_executor import ScriptExecutor
+from src.executors.ocr_executor import OCRExecutor
+from src.executors.rag_executor import RAGRetrieverExecutor
+from src.executors.validation_executor import ValidationExecutor
+from src.kafka.producer import WorkflowProducer
 
-app = FastAPI(title="AI Agent Framework", version="0.1.0")
 
-# Initialize orchestrator with executors
-executors = {
-    "llm": LLMExecutor(),
-    "tool": ToolExecutor(),
-    "script": ScriptExecutor(),
-}
-orchestrator = Orchestrator(executors)
+app = FastAPI(title="AI Agent Framework", version="0.2.0")
 
-# Request/Response models
-class TaskDef(BaseModel):
-    id: str
-    type: str
-    config: Dict[str, Any]
-    inputs: Dict[str, str] = {}
 
-class WorkflowRequest(BaseModel):
-    name: str
-    description: str
-    tasks: List[TaskDef]
-    edges: List[tuple]
+def _build_orchestrator() -> Orchestrator:
+    # Executors keyed by the names used in TaskFlow.executor
+    executors: Dict[str, Any] = {
+        "LLMExecutor": LLMExecutor(),
+        "OCRExecutor": OCRExecutor(),
+        "ValidationExecutor": ValidationExecutor(),
+        # DatabaseExecutor is wired but requires a real session_factory in production
+        "DatabaseExecutor": DatabaseExecutor(session_factory=lambda: None),
+        "APICallerExecutor": APICallerExecutor(),
+        "RAGRetrieverExecutor": RAGRetrieverExecutor(),
+    }
+    state_manager = StateManager(
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        ttl_seconds=int(os.getenv("STATE_TTL_SECONDS", "3600")),
+    )
+    return Orchestrator(executors=executors, state_manager=state_manager)
 
-class ExecuteRequest(BaseModel):
-    workflow: WorkflowRequest
-    input_data: Dict[str, Any]
 
-@app.post("/workflows/execute")
-async def execute_workflow(request: ExecuteRequest):
-    """Execute a workflow"""
+orchestrator = _build_orchestrator()
+
+# Kafka producer for async workflows
+_kafka_bootstrap = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+_kafka_topic = os.getenv("KAFKA_WORKFLOW_TOPIC", "workflows")
+producer = WorkflowProducer(brokers=_kafka_bootstrap, topic=_kafka_topic)
+
+
+@app.post("/workflows/execute", response_model=WorkflowResponse)
+async def execute_workflow(request: WorkflowRequest) -> WorkflowResponse:
+    """Synchronously execute a workflow described by a WorkflowRequest."""
     try:
-        # Build workflow object
-        workflow = Workflow(
-            name=request.workflow.name,
-            description=request.workflow.description
+        flow = TaskFlow(workflow_id=request.workflow_id, tasks=request.tasks)
+        result = orchestrator.execute(flow, request.input_data)
+        return WorkflowResponse(
+            status="success",
+            output=result.outputs,
+            metrics=result.metrics,
+            error=None if not result.errors else str(result.errors),
         )
-        
-        for task_def in request.workflow.tasks:
-            task = Task(
-                id=task_def.id,
-                type=TaskType(task_def.type),
-                config=task_def.config,
-                inputs=task_def.inputs
-            )
-            workflow.add_task(task)
-        
-        for src, dst in request.workflow.edges:
-            workflow.connect(src, dst)
-        
-        # Execute
-        state = orchestrator.execute(workflow, request.input_data)
-        
-        return {
-            "status": "success",
-            "output": state.task_results,
-            "metrics": state.get_metrics()
-        }
-    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
 
-# For local testing
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.post("/workflows/enqueue", response_model=dict)
+async def enqueue_workflow(request: WorkflowRequest) -> Dict[str, Any]:
+    """Enqueue a workflow for async processing via Kafka."""
+    try:
+        payload = request.dict()
+        producer.submit(payload)
+        return {"status": "queued", "workflow_id": request.workflow_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/health")
+async def health() -> Dict[str, str]:
+    return {"status": "healthy"}
