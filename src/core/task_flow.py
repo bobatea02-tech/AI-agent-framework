@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TaskDefinition(BaseModel):
@@ -15,7 +15,8 @@ class TaskDefinition(BaseModel):
     depends_on: List[str] = Field(default_factory=list)
     config: Dict[str, Any] = Field(default_factory=dict)
 
-    @validator("id")
+    @field_validator("id")
+    @classmethod
     def non_empty(cls, v: str) -> str:
         if not v:
             raise ValueError("task id must be non-empty")
@@ -26,14 +27,14 @@ class TaskFlow(BaseModel):
     workflow_id: str
     tasks: List[TaskDefinition]
 
-    @root_validator
-    def validate_dependencies(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        task_ids = {t.id for t in values.get("tasks", [])}
-        for task in values.get("tasks", []):
+    @model_validator(mode='after')
+    def validate_dependencies(self) -> TaskFlow:
+        task_ids = {t.id for t in self.tasks}
+        for task in self.tasks:
             for dep in task.depends_on:
                 if dep not in task_ids:
                     raise ValueError(f"Task '{task.id}' depends on unknown task '{dep}'")
-        return values
+        return self
 
     def as_dag_edges(self) -> List[tuple]:
         """Return list of edges (dependency -> task)."""
