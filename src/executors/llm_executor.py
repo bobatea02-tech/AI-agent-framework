@@ -1,158 +1,159 @@
-# src/executors/llm_executor.py
+from __future__ import annotations
+
 import os
-from typing import Dict, Any
-from .base import BaseExecutor
+import logging
+import json
+from typing import Any, Dict, List, Optional
+from openai import OpenAI
+
+from src.core.executor import BaseExecutor
+
+logger = logging.getLogger(__name__)
 
 class LLMExecutor(BaseExecutor):
-    def __init__(self):
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-    
-    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> str:
+    """
+    Executor for Large Language Model (LLM) tasks.
+    Handles document classification and field extraction specific to Indian documents.
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
-        Call LLM with prompt
+        Initialize the LLM executor.
         
-        config:
-            model: "gpt-4" or "ollama/llama2"
-            prompt: "You are a helpful assistant..."
-            max_tokens: 2000
-        
-        inputs:
-            query: user query
-            context: additional context
+        Args:
+            config: Configuration dictionary. 
+                    Uses OPENAI_API_KEY from environment if not provided in config.
         """
-        model = config.get("model", "gpt-4")
-        prompt_template = config.get("prompt", "")
-        max_tokens = config.get("max_tokens", 2000)
+        super().__init__(config)
+        api_key = self.config.get("api_key") or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logger.warning("OPENAI_API_KEY not found in config or environment")
         
-        # Format prompt with inputs
-        import os
-        from typing import Dict, Any, Optional
-        from .base import BaseExecutor
+        self.client = OpenAI(api_key=api_key)
 
-        import requests
+    def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute LLM tasks based on task_type.
 
+        Args:
+            inputs: Dictionary containing:
+                - task_type: 'classify', 'extract', or 'completion'
+                - text: Text content (required for classify/extract)
+                - document_type: Type of document (required for extract)
+                - ... other args for completion
 
-        class LLMExecutor(BaseExecutor):
-            """Executor that calls local Ollama or OpenAI backends.
+        Returns:
+            Dictionary containing the task result.
+        """
+        task_type = inputs.get("task_type")
+        
+        if task_type == "classify":
+            text = inputs.get("text")
+            if not text:
+                raise ValueError("Text is required for classification")
+            return self.classify_document(text)
+            
+        elif task_type == "extract":
+            text = inputs.get("text")
+            document_type = inputs.get("document_type")
+            if not text:
+                raise ValueError("Text is required for extraction")
+            if not document_type:
+                raise ValueError("Document type is required for extraction")
+            return self.extract_fields(text, document_type)
+            
+        elif task_type == "completion":
+            messages = inputs.get("messages")
+            if not messages:
+                prompt = inputs.get("prompt")
+                if not prompt:
+                     raise ValueError("Either 'messages' or 'prompt' is required for completion")
+                messages = [{"role": "user", "content": prompt}]
+            
+            model = inputs.get("model", "gpt-4o-mini")
+            return self.completion(messages, model)
+            
+        else:
+            raise ValueError(f"Unknown task_type: {task_type}")
 
-            This implementation is defensive: it supports the new `openai.OpenAI` client
-            if available, and falls back to the older `openai` module shape when needed.
-            Ollama calls are sent to a local HTTP endpoint and parsed with fallbacks.
-            """
+    def completion(self, messages: List[Dict[str, str]], model: str = "gpt-4o-mini") -> Dict[str, Any]:
+        """
+        Perform a generic chat completion.
+        """
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages
+        )
+        content = response.choices[0].message.content
+        return {"content": content}
 
-            def __init__(self, openai_api_key: Optional[str] = None):
-                # Allow injecting the API key for tests; otherwise read from env
-                self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+    def classify_document(self, text: str) -> Dict[str, Any]:
+        """
+        Classify the document text into predefined categories.
+        
+        Categories: aadhaar, pan, passport, driving_license, other
+        """
+        system_prompt = (
+            "You are a document classifier for Indian identity documents. "
+            "Classify the input text into one of the following categories: "
+            "aadhaar, pan, passport, driving_license, other. "
+            "Return JSON with keys: document_type, confidence (0-1), reasoning."
+        )
+        
+        response = self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text[:4000]} # Truncate if too long to save tokens
+            ],
+            response_format={"type": "json_object"}
+        )
+        
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("Received empty response from LLM")
+            
+        return json.loads(content)
 
-            def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> str:
-                """Build prompt from template and route to the correct model backend."""
-                model = config.get("model", "gpt-4")
-                prompt_template = config.get("prompt", "")
-                max_tokens = config.get("max_tokens", 2000)
+    def extract_fields(self, text: str, document_type: str) -> Dict[str, Any]:
+        """
+        Extract structured fields from the document text based on its type.
+        """
+        if document_type == "aadhaar":
+            return self._extract_aadhaar(text)
+        elif document_type == "pan":
+            return self._extract_pan(text)
+        else:
+             raise ValueError(f"Unsupported document type for extraction: {document_type}")
 
-                # Safely format prompt (if keys are missing, KeyError will surface clearly)
-                prompt = prompt_template.format(**(inputs or {}))
+    def _extract_aadhaar(self, text: str) -> Dict[str, Any]:
+        system_prompt = (
+            "Extract the following fields from the Aadhaar card text: "
+            "name, aadhaar_number, dob (YYYY-MM-DD), gender, address, confidence (0-1). "
+            "Return JSON object."
+        )
+        return self._call_llm_extraction(system_prompt, text)
 
-                if isinstance(model, str) and model.startswith("ollama/"):
-                    return self._call_ollama(model, prompt, max_tokens)
-                return self._call_openai(model, prompt, max_tokens)
+    def _extract_pan(self, text: str) -> Dict[str, Any]:
+        system_prompt = (
+            "Extract the following fields from the PAN card text: "
+            "name, pan_number, father_name, dob (YYYY-MM-DD), confidence (0-1). "
+            "Return JSON object."
+        )
+        return self._call_llm_extraction(system_prompt, text)
 
-            def _call_openai(self, model: str, prompt: str, max_tokens: int) -> str:
-                """Call OpenAI-compatible API. Tries new and legacy clients."""
-                # Try new OpenAI client first (openai.OpenAI)
-                try:
-                    try:
-                        from openai import OpenAI
-
-                        client = OpenAI(api_key=self.openai_api_key)
-                        resp = client.chat.completions.create(
-                            model=model,
-                            messages=[{"role": "user", "content": prompt}],
-                            max_tokens=max_tokens,
-                        )
-                        # new client: resp.choices[0].message.content
-                        choice = resp.choices[0]
-                        # If the choice is dict-like, prefer safe dict access
-                        if isinstance(choice, dict):
-                            return choice.get("message", {}).get("content", "")
-                        # Otherwise try attribute access on message
-                        msg = getattr(choice, "message", None)
-                        if msg is not None:
-                            if isinstance(msg, dict):
-                                return msg.get("content", "")
-                            return getattr(msg, "content", "")
-                        # As a last resort, stringify
-                        return str(choice)
-                    except Exception:
-                        # Fallback to legacy openai package shape
-                        import openai
-
-                        openai.api_key = self.openai_api_key
-                        # Some openai package versions expose ChatCompletion, some do not.
-                        chat_cls = getattr(openai, "ChatCompletion", None)
-                        if chat_cls is not None and hasattr(chat_cls, "create"):
-                            resp = chat_cls.create(
-                                model=model,
-                                messages=[{"role": "user", "content": prompt}],
-                                max_tokens=max_tokens,
-                            )
-                        else:
-                            # Fall back to the older Completion API which uses prompt instead.
-                            # Use getattr to avoid static-analysis errors when the attribute
-                            # is not present in the installed openai stub.
-                            comp_cls = getattr(openai, "Completion", None)
-                            if comp_cls is not None and hasattr(comp_cls, "create"):
-                                resp = comp_cls.create(
-                                    model=model,
-                                    prompt=prompt,
-                                    max_tokens=max_tokens,
-                                )
-                            else:
-                                raise RuntimeError("OpenAI client does not expose a compatible Completion API")
-
-                        # Attempt to extract text from the legacy response
-                        choice = resp.choices[0]
-                        if isinstance(choice, dict):
-                            return choice.get("message", {}).get("content", "") or choice.get("text", "")
-                        # attribute based
-                        msg = getattr(choice, "message", None)
-                        if msg is not None:
-                            return getattr(msg, "content", "")
-                        return getattr(choice, "text", "") or str(choice)
-                except Exception as e:
-                    raise RuntimeError(f"OpenAI API error: {e}")
-
-            def _call_ollama(self, model: str, prompt: str, max_tokens: int) -> str:
-                """Call local Ollama model via HTTP API.
-
-                Returns the text response or raises RuntimeError on failure.
-                """
-                model_name = model.split("/", 1)[-1]
-                url = "http://localhost:11434/api/generate"
-                payload = {
-                    "model": model_name,
-                    "prompt": prompt,
-                    # include max_tokens for compatibility if supported by Ollama
-                    "max_tokens": max_tokens,
-                    "stream": False,
-                }
-
-                try:
-                    resp = requests.post(url, json=payload, timeout=10)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    # Ollama responses vary; try common keys
-                    for key in ("response", "output", "text", "result"):
-                        if key in data:
-                            return data[key]
-                    # Some Ollama endpoints return a list or nested structure
-                    # Try to pull a sensible fallback
-                    if isinstance(data, dict) and "choices" in data:
-                        first = data["choices"][0]
-                        if isinstance(first, dict):
-                            return first.get("text") or first.get("message") or str(first)
-                    # As a last resort, return the full JSON as a string
-                    return str(data)
-                except Exception as e:
-                    raise RuntimeError(f"Ollama error: {e}")
-
+    def _call_llm_extraction(self, system_prompt: str, text: str) -> Dict[str, Any]:
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text[:4000]}
+            ],
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("Received empty response from LLM")
+            
+        return json.loads(content)
