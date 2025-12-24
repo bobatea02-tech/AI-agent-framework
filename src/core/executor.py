@@ -25,11 +25,12 @@ class BaseExecutor(ABC):
         self.config = config or {}
 
     @abstractmethod
-    def execute(self, inputs: Dict[str, Any]) -> Any:
+    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Any:
         """
         Execute the core logic. Must be implemented by subclasses.
 
         Args:
+            config: Task-specific configuration.
             inputs: Dictionary of input parameters.
 
         Returns:
@@ -50,11 +51,12 @@ class BaseExecutor(ABC):
         if not isinstance(inputs, dict):
             raise ValueError(f"Inputs must be a dictionary, got {type(inputs)}")
 
-    def run_with_monitoring(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def run_with_monitoring(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Run execute() with monitoring, logging, and error handling.
 
         Args:
+            config: Task-specific configuration.
             inputs: Dictionary of input parameters.
 
         Returns:
@@ -80,7 +82,7 @@ class BaseExecutor(ABC):
             self.validate_inputs(inputs)
             logger.info(f"Starting execution with inputs keys: {list(inputs.keys())}")
             
-            output = self.execute(inputs)
+            output = self.execute(config, inputs)
             
             result["status"] = "success"
             result["output"] = output
