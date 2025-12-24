@@ -5,6 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from datetime import datetime
+from src.utils.metrics import record_task_execution
 
 # Configure logging if not already configured
 logger = logging.getLogger(__name__)
@@ -96,6 +97,11 @@ class BaseExecutor(ABC):
         finally:
             duration = time.time() - start_time
             result["duration"] = duration
+            
+            # Record metrics
+            executor_name = self.__class__.__name__
+            record_task_execution(executor_name, result["status"], duration)
+            
             logger.info(f"Execution finished in {duration:.4f}s")
             
         return result

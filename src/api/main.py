@@ -1,35 +1,19 @@
-from __future__ import annotations
-
 import logging
 import os
 import sys
 from typing import Any
 
-import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from src.api.routes import router, kafka_producer
+from src.utils.logger import setup_logging, get_logger
 
-# --- Configure Structlog ---
-
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.StackInfoRenderer(),
-        structlog.dev.set_exc_info,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer() if os.getenv("LOG_FORMAT") == "json" else structlog.dev.ConsoleRenderer(),
-    ],
-    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-    context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
-    cache_logger_on_first_use=False,
-)
-
-logger = structlog.get_logger()
+# --- Configure Logging ---
+setup_logging()
+logger = get_logger("api")
 
 
 # --- FastAPI App Setup ---
@@ -39,6 +23,12 @@ app = FastAPI(
     version="1.0.0",
     description="API for managing AI agent workflows and tasks",
 )
+
+# --- Metrics Endpoint ---
+# Create ASGI app for Prometheus metrics
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
 
 # --- CORS Middleware ---
 

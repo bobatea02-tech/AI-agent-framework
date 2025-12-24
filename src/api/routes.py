@@ -32,6 +32,7 @@ from src.executors.ocr_executor import OCRExecutor
 from src.executors.rag_executor import RAGRetrieverExecutor
 from src.executors.validation_executor import ValidationExecutor
 from src.kafka.producer import default_producer
+from src.utils.metrics import record_workflow_submission, record_workflow_completion
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,9 @@ def submit_workflow(
             payload['execution_id'] = execution_id
             kafka_producer.publish_workflow(submission.workflow_id, execution_id, payload)
             message = "Workflow submitted successfully"
+            
+            # Record metrics
+            record_workflow_submission(submission.workflow_id)
         else:
             # Fallback to sync execution? Or just error? 
             # Request implies just queueing. If Kafka missing, we might need to warn or queue in DB only.
@@ -132,12 +136,22 @@ def submit_workflow(
             message = "Workflow accepted but Kafka is unavailable"
             logger.warning("Kafka unavailable for submission %s", execution_id)
             
+            # Record metrics even if queued without kafka? 
+            # Technically submitted.
+            record_workflow_submission(submission.workflow_id)
+            
     except Exception as e:
         logger.error("Failed to publish workflow %s: %s", execution_id, e)
         # We don't rollback DB because record provides traceability of failure
         execution_record.status = 'failed'
         execution_record.error_message = f"Submission error: {str(e)}"
         db.commit()
+        
+        # Record failure metric
+        # We don't have duration here easily unless we track from start of func, 
+        # but this is immediate failure.
+        # record_workflow_completion(submission.workflow_id, 'failed', 0)
+        
         raise HTTPException(status_code=500, detail="Failed to submit workflow to queue")
 
     return WorkflowResponse(
@@ -294,6 +308,26 @@ def cancel_workflow(
     exec_record.completed_at = datetime.utcnow()
     exec_record.error_message = "Cancelled by user"
     db.commit()
+    
+    # Record metrics
+    # Calculate duration
+    duration = 0
+    if exec_record.started_at:
+        duration = (exec_record.completed_at - exec_record.started_at).total_seconds()
+    elif exec_record.submitted_at:
+        duration = (exec_record.completed_at - exec_record.submitted_at).total_seconds()
+        
+    # Get workflow ID string
+    wf_id = str(exec_record.workflow_id) # Falls back to UUID if not joined.
+    # ideally fetch definition but for metrics simple UUID is okay if consistent?
+    # Or join to get readable ID. 
+    # Let's risk an extra query for cleaner metrics if possible, or just use what we have.
+    # Earlier code fetched definition.
+    wf_def = db.query(WorkflowDefinition).filter(WorkflowDefinition.id == exec_record.workflow_id).first()
+    if wf_def:
+        wf_id = wf_def.workflow_id
+        
+    record_workflow_completion(wf_id, 'cancelled', duration)
     
     logger.info("Workflow %s cancelled by user", execution_id)
     # TODO: Signal cancellation to Orchestrator/Workers

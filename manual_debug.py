@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 mock_modules = [
     'kafka', 'kafka.producer', 'kafka.admin',
     'redis',
-    'structlog', 'structlog.contextvars', 'structlog.processors', 'structlog.dev',
+    # 'structlog', 'structlog.contextvars', 'structlog.processors', 'structlog.dev', # Use real structlog checks
     'pdf2image',
     'pytesseract',
     'PIL', 'PIL.Image',
@@ -22,7 +22,7 @@ for module_name in mock_modules:
     sys.modules[module_name] = MagicMock()
 
 # Explicit mocks for things that might be accessed
-sys.modules['structlog'].get_logger.return_value = MagicMock()
+# sys.modules['structlog'].get_logger.return_value = MagicMock()
 
 try:
     print("Starting manual debug...")
@@ -85,6 +85,19 @@ try:
                         print("FAILURE: Execution ID mismatch")
                     else:
                         print("Status check passed!")
+                        
+                # 3. Check Metrics
+                resp_metrics = await ac.get("/metrics", follow_redirects=True)
+                if resp_metrics.status_code != 200:
+                     print("FAILURE: Metrics endpoint returned", resp_metrics.status_code)
+                else:
+                    metrics_text = resp_metrics.text
+                    print("Metrics endpoint check passed")
+                    if 'workflows_submitted_total' in metrics_text and 'test-workflow-001' in metrics_text:
+                        print("SUCCESS: workflows_submitted_total metric found.")
+                    else:
+                        print("FAILURE: Metric workflow_submitted_total not found or incorrect.")
+
 
 
     asyncio.run(run_test())
