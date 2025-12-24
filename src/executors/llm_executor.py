@@ -31,7 +31,7 @@ class LLMExecutor(BaseExecutor):
         
         self.client = OpenAI(api_key=api_key)
 
-    def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute LLM tasks based on task_type.
 

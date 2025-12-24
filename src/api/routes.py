@@ -119,7 +119,7 @@ def submit_workflow(
     # 3. Publish to Kafka
     try:
         if kafka_producer:
-            payload = submission.dict()
+            payload = submission.model_dump()
             payload['execution_id'] = execution_id
             kafka_producer.publish_workflow(submission.workflow_id, execution_id, payload)
             message = "Workflow submitted successfully"

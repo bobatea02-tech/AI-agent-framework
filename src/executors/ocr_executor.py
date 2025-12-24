@@ -18,7 +18,7 @@ class OCRExecutor(BaseExecutor):
     Supports PDF and Image files using Tesseract.
     """
 
-    def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute OCR on provided documents.
 

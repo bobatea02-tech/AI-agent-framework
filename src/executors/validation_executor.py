@@ -20,7 +20,7 @@ class ValidationExecutor(BaseExecutor):
         "name": r"^[A-Za-z\s]+$"
     }
 
-    def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate input data against rules.
 

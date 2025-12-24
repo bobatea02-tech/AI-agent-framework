@@ -66,7 +66,7 @@ def test_validation_executor_valid_data(validation_executor):
         "aadhaar_number": "123456789012",
         "pan_number": "ABCDE1234F"
     }
-    result = validation_executor.execute({"data": data})
+    result = validation_executor.execute({}, {"data": data})
     
     assert result["is_valid"] is True
     assert result["status"] == "success"
@@ -79,7 +79,7 @@ def test_validation_executor_invalid_data(validation_executor):
         "aadhaar_number": "123", # Invalid: too short
         "pan_number": "ABCDE1234F" # Valid
     }
-    result = validation_executor.execute({"data": data})
+    result = validation_executor.execute({}, {"data": data})
     
     assert result["is_valid"] is False
     assert result["status"] == "failure"
