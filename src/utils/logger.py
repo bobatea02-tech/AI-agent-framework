@@ -1,100 +1,112 @@
-
 import logging
-import logging.handlers
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 from typing import Any, Dict
 
 import structlog
+from structlog.stdlib import LoggerFactory
+from structlog.types import Processor
 
-def setup_logging(
-    log_level: str = None,
-    log_dir: str = "logs",
-    log_filename: str = "app.log"
-) -> None:
+# Ensure logs directory exists
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "app.json")
+
+
+def setup_logging() -> None:
     """
-    Configures structlog and standard logging.
+    Configure structlog and standard logging.
+    Sets up JSON formatting, timestamping, and output to both console and rotating file.
+    """
+    # Get log level from environment or default to INFO
+    log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_str, logging.INFO)
+
+    # Standard logging configuration
+    # We need to configure the root logger to capture all logs (including libraries)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
     
-    Args:
-        log_level: Logging level (e.g., "INFO", "DEBUG"). Defaults to LOG_LEVEL env var or INFO.
-        log_dir: Directory to store log files.
-        log_filename: Name of the log file.
-    """
-    if log_level is None:
-        log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    # Remove existing handlers to avoid duplicates during reloads
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
 
-    # Create logs directory if it doesn't exist
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    # 1. Stream Handler (Console) - Human readable or JSON based on env?
+    # Requirement says "Configure output to both file and console"
+    # Usually console is human readable in dev, JSON in prod.
+    # Let's use a standard formatter for console for readability unless LOG_FORMAT=json
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    
+    # 2. File Handler (JSON) - Rotating
+    file_handler = RotatingFileHandler(
+        LOG_FILE,
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5,
+        encoding="utf-8"
+    )
+    file_handler.setLevel(log_level)
 
-    shared_processors = [
+    # structlog Processor Configuration
+    # These processors run effectively "before" the formatter
+    shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        # Add request_id validation/extraction if passed in context, handled by merge_contextvars
     ]
 
-    # Configure structlog
+    # Structlog configuration
     structlog.configure(
         processors=shared_processors + [
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.UnicodeDecoder(),
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
-        logger_factory=structlog.stdlib.LoggerFactory(),
+        logger_factory=LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
 
-    # Configure standard logging
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(log_level)
-    # We use ConsoleRenderer for console to make it readable, or JSONRenderer if you prefer valid JSON always.
-    # The prompt asked for "JSON formatting" generally, but often console is preferred readable. 
-    # However, "Sets up processors for JSON formatting" implies JSON everywhere usually, or at least for file.
-    # Let's use JSON for both to be safe and consistent, or ConsoleRenderer for console + JSON for file.
-    # Re-reading: "Uses log level from environment variable... Configures output to both file and console"
-    # "Sets up processors for JSON formatting" -> implues structure.
-    
-    # Let's use JSON for file, and ConsoleRenderer (colored, structured) for console if it's a TTY, 
-    # but strictly following "JSON formatting" might mean JSON everywhere. 
-    # structlog.processors.JSONRenderer() is what we want for the formatter.
-    
-    # Formatter for console - let's make it JSON as requested for robust structured logging.
+    # Formatter for JSON file output
+    # This renders the final dict to a JSON string
     json_formatter = structlog.stdlib.ProcessorFormatter(
         processor=structlog.processors.JSONRenderer(),
         foreign_pre_chain=shared_processors,
     )
-
-    console_handler.setFormatter(json_formatter)
-
-    # File handler with rotation
-    file_path = os.path.join(log_dir, log_filename)
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        file_path, when="midnight", interval=1, backupCount=7, encoding="utf-8"
-    )
-    file_handler.setLevel(log_level)
     file_handler.setFormatter(json_formatter)
 
-    # Root logger configuration
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-    
-    # Remove existing handlers to avoid duplicates if setup is called multiple times
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-        
+    # Formatter for Console
+    # Use ConsoleRenderer for colors/readability or JSON
+    if os.getenv("LOG_FORMAT", "concise").lower() == "json":
+        console_formatter = json_formatter
+    else:
+        console_formatter = structlog.stdlib.ProcessorFormatter(
+            processor=structlog.dev.ConsoleRenderer(colors=True),
+            foreign_pre_chain=shared_processors,
+        )
+    console_handler.setFormatter(console_formatter)
+
+    # Add handlers
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
-    # Intercept standard library logs
-    logging.captureWarnings(True)
+    # Suppress overly verbose libraries if needed (optional optimization)
+    # logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
-def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
+
+def get_logger(name: str = "ai_agent") -> structlog.stdlib.BoundLogger:
     """
-    Returns a configured structlog logger.
+    Return a configured structlog logger.
     
     Args:
-        name: Name of the logger. If None, returns the root logger.
+        name: Logger name.
+        
+    Returns:
+        BoundLogger: Configured logger instance.
     """
     return structlog.get_logger(name)
