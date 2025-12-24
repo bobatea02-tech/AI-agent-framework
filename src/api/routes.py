@@ -121,7 +121,7 @@ def submit_workflow(
         if kafka_producer:
             payload = submission.dict()
             payload['execution_id'] = execution_id
-            kafka_producer.submit(payload)
+            kafka_producer.publish_workflow(submission.workflow_id, execution_id, payload)
             message = "Workflow submitted successfully"
         else:
             # Fallback to sync execution? Or just error? 

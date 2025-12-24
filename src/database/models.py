@@ -32,7 +32,7 @@ class WorkflowExecution(Base):
     execution_id = Column(String, unique=True, nullable=False)
     workflow_id = Column(UUID(as_uuid=True), ForeignKey('workflow_definitions.id'), nullable=False)
     workflow_version = Column(String)
-    status = Column(Enum('pending', 'running', 'completed', 'failed', name='workflow_status_enum', create_type=False), default='pending')
+    status = Column(Enum('pending', 'queued', 'running', 'completed', 'failed', 'cancelled', name='workflow_status_enum', create_type=False), default='pending')
     priority = Column(Integer, default=0)
     input_data = Column(JSON)
     output_data = Column(JSON)
