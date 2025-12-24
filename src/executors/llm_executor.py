@@ -25,11 +25,21 @@ class LLMExecutor(BaseExecutor):
                     Uses OPENAI_API_KEY from environment if not provided in config.
         """
         super().__init__(config)
-        api_key = self.config.get("api_key") or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            logger.warning("OPENAI_API_KEY not found in config or environment")
-        
-        self.client = OpenAI(api_key=api_key)
+        super().__init__(config)
+        self._client: Optional[OpenAI] = None
+
+    @property
+    def client(self) -> OpenAI:
+        """
+        Lazy-load the OpenAI client.
+        """
+        if self._client is None:
+            api_key = self.config.get("api_key") or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                logger.error("OPENAI_API_KEY not found in config or environment")
+                raise ValueError("OPENAI_API_KEY is required for LLM execution")
+            self._client = OpenAI(api_key=api_key)
+        return self._client
 
     def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
