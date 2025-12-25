@@ -1,361 +1,192 @@
-# AI Agent Framework
+# 🤖 AI Agent Framework (SDK)
 
-A lightweight, modular framework for orchestrating AI workflows using Large Language Models (LLMs), tools, and custom scripts. Built with FastAPI, Redis, and a robust DAG-based task scheduler.
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green)
+![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.8-red)
+![Kafka](https://img.shields.io/badge/Apache%20Kafka-7.6-black)
+![License](https://img.shields.io/badge/License-MIT-purple)
 
-## Features
+A production-ready framework for orchestrating intelligent AI agents. This SDK enables the creation and execution of complex, multi-step workflows involving LLM reasoning, document processing, and stateful interactions.
 
-- **DAG-based Workflow Orchestration**: Define workflows as directed acyclic graphs (DAGs) with automatic topological sorting and dependency resolution.
-- **Multi-Executor Support**: Execute tasks via LLMs (OpenAI, Ollama), HTTP tools, and custom scripts.
-- **State Machine**: Track task execution state (pending, running, succeeded, failed, skipped) with automatic upstream dependency validation.
-- **Structured JSON Logging**: All events logged as JSON for easy parsing and integration with observability platforms.
-- **Redis State Persistence**: Save and retrieve workflow state from Redis with configurable TTLs.
-- **FastAPI REST API**: Simple async HTTP endpoints for workflow submission and status tracking.
-- **Flexible Input Resolution**: Placeholder-based input system for passing outputs from upstream tasks to downstream consumers.
+## 🚀 Features
 
-## Quick Start
+- **Workflow Orchestration**: Define complex task flows using JSON/YAML and execute them reliability.
+- **Intelligent Agents**: Build agents with specialized capabilities (OCR, RAG, Form Filling).
+- **Scalable Architecture**: Event-driven design using Apache Kafka and Apache Airflow.
+- **State Management**: Robust state persistence with Redis and PostgreSQL.
+- **Observability**: Built-in structured logging and Prometheus metrics.
+- **Developer Experience**: Comprehensive API, typed SDK, and easy deployment.
 
-### Prerequisites
+## 🏗️ Architecture
 
-- Python 3.10+
-- Redis (optional, for state persistence)
-- OpenAI API key or local Ollama instance (optional, for LLM tasks)
+The framework follows a modular, event-driven architecture:
 
-### Installation
+```mermaid
+graph TD
+    Client[Client App] -->|POST /workflows| API[FastAPI Gateway]
+    API -->|Submit| Kafka[Apache Kafka]
+    Kafka -->|Consume| Worker[Workflow Worker]
+    Worker -->|Execute Task| Executor{Task Executors}
+    
+    Executor -->|Text Extraction| OCR[OCR Executor]
+    Executor -->|Reasoning| LLM[LLM Executor]
+    Executor -->|Data Access| DB[Database Executor]
+    
+    Worker -->|Persist State| Redis[(Redis)]
+    Worker -->|Store History| Postgres[(PostgreSQL)]
+    
+    Airflow[Apache Airflow] -->|Schedule| API
+```
 
-1. Clone the repository:
+## 📋 Prerequisites
+
+- **Docker** and **Docker Compose** (v2+)
+- **Python 3.10+** (for local development)
+- **Git**
+
+## 🏁 Quick Start
+
+The easiest way to get started is using the included startup script, which handles validaton and orchestration of all services.
+
+1.  **Clone the repository**:
+    ```bash
+    git clone <repository-url>
+    cd ai-agent-framework
+    ```
+
+2.  **Run the startup script**:
+    ```bash
+    ./scripts/startup.sh
+    ```
+    This script will:
+    *   Create `.env` from template (if missing).
+    *   Initialize Docker containers (Postgres, Redis, Kafka, Zookeeper, API, Airflow).
+    *   Wait for health checks.
+    *   Initialize the database and Kafka topics.
+
+3.  **Access the Services**:
+    *   **API**: [http://localhost:8000](http://localhost:8000)
+    *   **Airflow UI**: [http://localhost:8080](http://localhost:8080) (user: `admin`, pass: `admin`)
+    *   **MinIO**: [http://localhost:9001](http://localhost:9001)
+    *   **Prometheus**: [http://localhost:9090](http://localhost:9090)
+    *   **Grafana**: [http://localhost:3000](http://localhost:3000)
+
+## 🛠️ Manual Setup
+
+If you prefer to run commands manually:
+
+1.  **Environment Setup**:
+    ```bash
+    cp .env.example .env
+    # Edit .env and set AIRFLOW_UID if on Linux: AIRFLOW_UID=$(id -u)
+    ```
+
+2.  **Start Infrastructure**:
+    ```bash
+    docker compose up -d postgres redis zookeeper kafka
+    ```
+
+3.  **Start Application**:
+    ```bash
+    docker compose up -d api airflow-webserver airflow-scheduler airflow-worker
+    ```
+
+4.  **Initialize**:
+    ```bash
+    # Init Database
+    docker compose exec api python -m src.database.init_db
+    
+    # Create Topics
+    docker compose exec kafka kafka-topics --create --topic workflows --bootstrap-server localhost:9092
+    ```
+
+## 📖 API Documentation
+
+The REST API is built with FastAPI. Interactive documentation is available at:
+
+*   **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+*   **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+### Common Endpoints
+
+**Submit a Workflow**
 ```bash
-git clone https://github.com/yourusername/ai-agent-framework.git
-cd ai-agent-framework
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
-export OPENAI_API_KEY="sk-..."
-export REDIS_HOST="localhost"
-export REDIS_PORT=6379
-```
-
-### Running the Server
-
-```bash
-python -m uvicorn src.api.routes:app --host 127.0.0.1 --port 8000
-```
-
-Then open:
-- API root: http://127.0.0.1:8000/
-- Health: http://127.0.0.1:8000/health
-- Swagger UI: http://127.0.0.1:8000/docs
-
-## Usage
-
-### Example: Research Agent Workflow
-
-```python
-import requests
-import json
-
-workflow_request = {
-  "workflow": {
-    "name": "research_agent",
-    "description": "Classify query, search web, summarize results",
-    "tasks": [
-      {
-        "id": "classify",
-        "type": "llm",
-        "config": {
-          "model": "gpt-4",
-          "prompt": "Classify the following query into one of: factual, opinion, or creative. Query: {query}"
-        },
-        "inputs": {}
-      },
-      {
-        "id": "search",
-        "type": "tool",
-        "config": {
-          "tool": "web_request",
-          "url": "https://api.example.com/search",
-          "method": "GET",
-          "params": {"q": "{query}"}
-        },
-        "inputs": {"query": "${__input__.query}"}
-      },
-      {
-        "id": "summarize",
-        "type": "llm",
-        "config": {
-          "model": "gpt-4",
-          "prompt": "Summarize the following search results:\n{search_results}"
-        },
-        "inputs": {"search_results": "${search.output}"}
-      }
-    ],
-    "edges": [
-      ["classify", "search"],
-      ["search", "summarize"]
-    ]
-  },
-  "input_data": {
-    "query": "Explain quantum computing for a 12-year-old"
-  }
-}
-
-response = requests.post(
-  "http://127.0.0.1:8000/workflows/execute",
-  json=workflow_request
-)
-
-result = response.json()
-print(json.dumps(result, indent=2))
-```
-
-### Response Structure
-
-```json
-{
-  "status": "success",
-  "output": {
-    "classify": "factual",
-    "search": [
-      {
-        "title": "Quantum Computing Explained",
-        "url": "https://...",
-        "snippet": "..."
-      }
-    ],
-    "summarize": "Quantum computing uses quantum bits..."
-  },
-  "metrics": {
-    "total_duration_ms": 2350,
-    "task_durations": {
-      "classify": 600,
-      "search": 900,
-      "summarize": 850
-    },
-    "task_statuses": {
-      "classify": "success",
-      "search": "success",
-      "summarize": "success"
+curl -X POST "http://localhost:8000/api/v1/workflows" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workflow_id": "knowledge_qa_v1",
+    "input": {
+        "query": "What are the requirements?"
     }
-  }
-}
+  }'
 ```
 
-## Project Structure (scaffolded for full brief)
+**Check Status**
+```bash
+curl "http://localhost:8000/api/v1/workflows/{execution_id}"
+```
+
+**List Agents**
+```bash
+curl "http://localhost:8000/api/v1/agents"
+```
+
+## 🧪 Testing
+
+Run the test suite to verify the framework:
+
+```bash
+# Install test dependencies
+pip install -r requirements.txt
+
+# Run unit tests
+pytest tests/unit
+
+# Run full suite (requires running infrastructure)
+pytest tests/
+```
+
+### Standalone Verification
+Specific components can be verified using scripts in `scripts/`:
+*   `python scripts/verify_task_flow_parser.py`: Verify workflow parsing logic.
+*   `python scripts/verify_state_manager.py`: Verify Redis state persistence.
+
+## 📂 Project Structure
 
 ```
 ai-agent-framework/
 ├── src/
-│   ├── api/
-│   │   ├── routes.py              # FastAPI endpoints
-│   │   └── schemas.py             # Pydantic request/response models
-│   ├── core/
-│   │   ├── orchestrator.py        # Orchestration engine
-│   │   ├── executor.py            # Base executor interface
-│   │   ├── task_flow.py           # Task flow schema + loader
-│   │   ├── state_manager.py       # Redis-backed state persistence
-│   │   ├── dag.py
-│   │   ├── workflow.py
-│   │   └── state_machine.py
-│   ├── executors/
-│   │   ├── base.py
-│   │   ├── llm_executor.py
-│   │   ├── ocr_executor.py
-│   │   ├── validation_executor.py
-│   │   ├── database_executor.py
-│   │   └── api_caller_executor.py
-│   ├── tools/
-│   │   ├── pdf_reader.py
-│   │   ├── ocr_tool.py
-│   │   ├── llm_client.py
-│   │   └── rag_retriever.py
-│   ├── agents/
-│   │   ├── form_filling_agent.py
-│   │   └── knowledge_qa_agent.py
-│   ├── kafka/
-│   │   ├── consumer.py
-│   │   └── producer.py
-│   ├── airflow/
-│   │   └── dags/agent_workflows.py
-│   ├── utils/
-│   │   ├── logger.py
-│   │   └── metrics.py
-│   ├── memory/
-│   │   └── redis_store.py
-│   ├── observability/
-│   │   └── logger.py
-│   └── config.py
-├── workflows/
-│   ├── form_filling_flow.json
-│   └── knowledge_qa_flow.json
-├── docker-compose.yml
-├── scripts/
-│   └── demo_state_machine.py
-├── tests/
-├── requirements.txt
-├── LICENSE
-└── README.md
+│   ├── api/            # FastAPI routes and schemas
+│   ├── core/           # Core logic (Orchestrator, TaskFlow, StateManager)
+│   ├── database/       # DB models and connection
+│   ├── executors/      # Task execution modules (LLM, OCR, etc.)
+│   └── kafka/          # Message queue handlers
+├── workflows/          # JSON workflow definitions
+├── scripts/            # Helper scripts (startup, verification)
+├── tests/              # Unit and integration tests
+├── docker-compose.yml  # Infrastructure definition
+└── README.md           # This file
 ```
 
-## Core Concepts
+## ❓ Troubleshooting
 
-### DAG (Directed Acyclic Graph)
+**Issue**: `ModuleNotFoundError: No module named 'src'`
+*   **Fix**: Ensure you run python commands from the project root, e.g., `python -m src.main`.
 
-Tasks are organized in a DAG where edges represent dependencies. The framework uses **Kahn's algorithm** for topological sorting to determine safe execution order.
+**Issue**: Kafka connection failed.
+*   **Fix**: Ensure Zookeeper is running first. Use `startup.sh` which handles start order.
 
-```python
-from src.core.dag import DAG, TaskNode
+**Issue**: Airflow permission errors on Linux.
+*   **Fix**: Ensure `AIRFLOW_UID` is set in `.env` matching your user ID (`id -u`).
 
-# Create tasks
-task_a = TaskNode(id="A", type="llm")
-task_b = TaskNode(id="B", type="tool")
-task_c = TaskNode(id="C", type="llm")
+## 🤝 Contributing
 
-# Build DAG
-dag = DAG(
-  tasks=[task_a, task_b, task_c],
-  edges=[("A", "B"), ("B", "C")]
-)
+1.  Fork the repository.
+2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
+3.  Commit your changes (`git commit -m 'Add amazing feature'`).
+4.  Push to the branch (`git push origin feature/amazing-feature`).
+5.  Open a Pull Request.
 
-# Get safe execution order
-order = dag.topological_sort()  # ["A", "B", "C"]
+## 📄 License
 
-# Get parallel execution groups
-groups = dag.execution_groups()  # [["A"], ["B"], ["C"]]
-```
-
-### State Machine
-
-Tracks task state and determines which tasks are runnable (all upstream tasks succeeded).
-
-```python
-from src.core.state_machine import StateMachine, TaskState
-
-sm = StateMachine(dag=dag)
-
-# Check runnable tasks
-runnable = sm.next_runnable()  # ["A"]
-
-# Mark task running
-sm.mark_running("A")
-
-# Mark task succeeded with result
-sm.mark_succeeded("A", result={"value": 42})
-
-# Now B is runnable
-runnable = sm.next_runnable()  # ["B"]
-```
-
-### Executors
-
-Executors handle the actual work. Implement the `BaseExecutor` interface:
-
-```python
-from src.executors.base import BaseExecutor
-
-class CustomExecutor(BaseExecutor):
-    def execute(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Any:
-        # Your custom logic here
-        return result
-```
-
-## Configuration
-
-Create a `.env` file in the project root (or use environment variables):
-
-```
-# API
-API_HOST=127.0.0.1
-API_PORT=8000
-
-# LLM
-OPENAI_API_KEY=sk-...
-OLLAMA_HOST=http://localhost:11434
-
-# Redis (optional)
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# Database (optional)
-DATABASE_URL=postgresql://user:password@localhost/dbname
-```
-
-## Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src tests/
-
-# Run specific test file
-pytest tests/test_dag.py -v
-```
-
-## Development
-
-### Code Style
-
-We use `black` for formatting and `ruff` for linting:
-
-```bash
-black src/ tests/
-ruff check src/ tests/
-```
-
-### Type Checking
-
-Use `mypy` for static type analysis:
-
-```bash
-mypy src/
-```
-
-## Contributing
-
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/your-feature`.
-3. Commit your changes: `git commit -am 'Add feature'`.
-4. Push to the branch: `git push origin feature/your-feature`.
-5. Submit a pull request.
-
-## Roadmap
-
-- [ ] Async/await execution with background job queue
-- [ ] Workflow persistence and resumption
-- [ ] Conditional task execution (if/else)
-- [ ] Loop/iteration support
-- [ ] Multi-step LLM agents with function calling
-- [ ] Caching layer for executor results
-- [ ] Webhook support for external task completion
-- [ ] Web UI for workflow monitoring and debugging
-
-## License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on the [GitHub repository](https://github.com/yourusername/ai-agent-framework/issues).
-
-## Authors
-
-- Your Name (you@example.com)
-
-## Acknowledgments
-
-- Inspired by Apache Airflow, LangGraph, and other DAG-based orchestration frameworks.
-- Built with FastAPI, Pydantic, and Redis.
+This project is licensed under the MIT License - see the `LICENSE` file for details.

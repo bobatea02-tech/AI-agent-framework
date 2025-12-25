@@ -61,3 +61,115 @@ def load_task_flow(path: str | Path) -> TaskFlow:
     return TaskFlow(**data)
 
 
+
+class TaskFlowParser:
+    """Parses and validates workflow definitions."""
+
+    def parse_workflow(self, workflow_path: str) -> Dict[str, Any]:
+        """
+        Loads workflow definition from JSON file, validates it, and resolves dependencies.
+
+        Args:
+            workflow_path: Path to the workflow JSON file.
+
+        Returns:
+            Dict containing the parsed workflow definition.
+        """
+        import json
+
+        path = Path(workflow_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                workflow_data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in workflow file: {e}")
+
+        if not self.validate_task_flow(workflow_data):
+           raise ValueError("Invalid task flow structure")
+
+        tasks = workflow_data.get("tasks", [])
+        self.resolve_dependencies(tasks)
+        
+        return workflow_data
+
+    def validate_task_flow(self, task_flow: Dict[str, Any]) -> bool:
+        """
+        Validates the structure of the task flow.
+
+        Args:
+            task_flow: The dictionary representation of the workflow.
+
+        Returns:
+            True if valid, False otherwise.
+        """
+        if not isinstance(task_flow, dict):
+             return False
+        
+        if "workflow_id" not in task_flow:
+            return False
+
+        if "tasks" not in task_flow or not isinstance(task_flow["tasks"], list):
+            return False
+
+        required_task_fields = {"id", "executor"}
+        
+        for task in task_flow["tasks"]:
+            if not isinstance(task, dict):
+                return False
+            if not required_task_fields.issubset(task.keys()):
+                 return False
+
+        return True
+
+    def resolve_dependencies(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """
+        Resolves task dependencies and checks for circular references.
+
+        Args:
+            tasks: List of task definitions.
+
+        Returns:
+            Dictionary mapping task IDs to their dependencies.
+        """
+        task_ids = {task["id"] for task in tasks}
+        dependencies = {}
+        
+        # Build dependency graph
+        for task in tasks:
+            task_id = task["id"]
+            deps = task.get("depends_on", [])
+            
+            # Validate that all dependencies exist
+            for dep in deps:
+                if dep not in task_ids:
+                    raise ValueError(f"Task '{task_id}' depends on unknown task '{dep}'")
+            
+            dependencies[task_id] = deps
+
+        # Check for circular dependencies
+        visited = set()
+        path = set()
+        
+        def check_cycle(curr_task):
+            visited.add(curr_task)
+            path.add(curr_task)
+            
+            for neighbor in dependencies.get(curr_task, []):
+                if neighbor not in visited:
+                    if check_cycle(neighbor):
+                        return True
+                elif neighbor in path:
+                     return True
+            
+            path.remove(curr_task)
+            return False
+
+        for task_id in task_ids:
+            if task_id not in visited:
+                if check_cycle(task_id):
+                     raise ValueError("Circular dependency detected in workflow")
+
+        return dependencies
