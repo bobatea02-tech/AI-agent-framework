@@ -10,10 +10,10 @@ mock_modules = [
     'kafka.producer',
     'kafka.admin',
     'redis',
-    'structlog',
-    'structlog.contextvars',
-    'structlog.processors',
-    'structlog.dev',
+    # 'structlog',  <-- Removed
+    # 'structlog.contextvars', <-- Removed
+    # 'structlog.processors', <-- Removed
+    # 'structlog.dev', <-- Removed
     'pdf2image',
     'pytesseract',
     'PIL',
@@ -24,18 +24,8 @@ mock_modules = [
 for module_name in mock_modules:
     sys.modules[module_name] = MagicMock()
 
-# Setup functional mock for structlog
-mock_structlog = sys.modules['structlog']
-mock_logger = MagicMock()
-mock_structlog.get_logger.return_value = mock_logger
-mock_structlog.make_filtering_bound_logger.return_value = mock_logger
-
-# Mock processors as needed
-mock_structlog.processors.JSONRenderer = MagicMock()
-mock_structlog.processors.TimeStamper = MagicMock()
-mock_structlog.dev.ConsoleRenderer = MagicMock()
-mock_structlog.processors.StackInfoRenderer = MagicMock()
-mock_structlog.processors.add_log_level = MagicMock()
+# structlog configuration removal
+# We use the real structlog library now.
 
 # Mock StateManager
 # We need to mock the actual class in its module if possible, 
