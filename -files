@@ -1,0 +1,119 @@
+[33mcommit 57ae5b17250622db4bae8a698cd2794ce9328253[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Fri Dec 26 12:41:14 2025 +0530
+
+    implementations after phase 9 10:utilities and deployment
+
+[33mcommit 641dd5bfc493cca4b223f57751cbd059c6cae105[m
+Author: modsaluji01 <salujimohammed90@gmail.com>
+Date:   Thu Dec 25 17:46:56 2025 +0530
+
+    feat: Introduce API documentation, deployment guides, Kubernetes manifests, and Terraform infrastructure.
+
+[33mcommit 38db5fd6366d6c4ac39d4ccd80b54580189b044e[m
+Author: modsaluji01 <salujimohammed90@gmail.com>
+Date:   Thu Dec 25 14:35:49 2025 +0530
+
+    feat: Implement core state management and task flow components, add a startup script, and update the README to reflect the new distributed SDK architecture.
+
+[33mcommit e6444b6d56128e3bc15ea38c6ab9b9586a5fcbee[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 24 20:58:34 2025 +0530
+
+    chore: add recommended VS Code extension and un-ignore .vscode directory
+
+[33mcommit c3bbd6eb829bd9b1eb62891c92ae2d9534bbaa54[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 24 20:35:44 2025 +0530
+
+    Add agent import verification script and an LLM executor for document classification, extraction, and completion.
+
+[33mcommit 55b358fb5123f47540525a1bdeca02b8fc48ac61[m
+Author: modsaluji01 <salujimohammed90@gmail.com>
+Date:   Wed Dec 24 20:02:21 2025 +0530
+
+    feat: Implement initial API and core executor, and correct structlog mock in debug script.
+
+[33mcommit 1efae6e507d23bd72dc28ee645f2dca7352c37d7[m
+Author: modsaluji01 <salujimohammed90@gmail.com>
+Date:   Wed Dec 24 19:52:03 2025 +0530
+
+    feat: Implement structured logging and Prometheus metrics with verification utilities and configuration.
+
+[33mcommit f6015a19d47dafa59bd6abd8774a86866da9709b[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 24 19:40:02 2025 +0530
+
+    create structured logger
+
+[33mcommit a371d67da1f403b9a2c55769c976d7fdcacb0e92[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 24 19:17:11 2025 +0530
+
+     Introduce LLM, OCR, and validation executors with supporting tests and API routes.
+
+[33mcommit 2002b757fef52af02b9f6fe98ec178988d5c00b4[m
+Author: modsaluji01 <salujimohammed90@gmail.com>
+Date:   Wed Dec 24 15:53:41 2025 +0530
+
+    feat: Add workflow submission and status API endpoints, database models, and integration tests with supporting fixtures.
+
+[33mcommit 6ea22d12fc7d7e55b7ba5911a31f5f5e0879c83b[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 24 14:49:59 2025 +0530
+
+     Introduce BaseExecutor and establish comprehensive testing framework with mocking and integration tests.
+
+[33mcommit 6e7e79acfdf9d43d0235653df0fd61b6e7088696[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Fri Dec 19 15:31:55 2025 +0530
+
+    core executors and airflow dags created for both agents
+
+[33mcommit 3e3badda2726a00dd9970e1f68adfe4bea05685a[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Thu Dec 18 22:33:42 2025 +0530
+
+    kafka integration and fastAPI application
+
+[33mcommit d4f67f61039bea1356930221443da1ca1b29e2f6[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 17 16:48:52 2025 +0530
+
+    Add database models, connection utilities, and initialization script for workflow and agent management.
+
+[33mcommit b03a0db640d405567695ac1a9756e96cbfa5f149[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 17 16:03:05 2025 +0530
+
+    Add Docker setup, FastAPI application, and initial project structure
+    
+    - Introduced `docker-compose.yml` for orchestrating services including FastAPI, PostgreSQL, Redis, Kafka, and Airflow.
+    - Created `Dockerfile` for building the FastAPI application with necessary dependencies.
+    - Added initial project documentation in `PROJECT_BRIEF.md`.
+    - Established Airflow and Kafka integration for workflow management.
+    - Implemented core components including agents, executors, and task flows for the AI Agent Framework.
+
+[33mcommit 54f173d8caef7584ef355f9cb689c459561ffde5[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 17 13:06:27 2025 +0530
+
+    Update Kafka producer implementation in API routes to use default producer. Modify requirements file.
+
+[33mcommit 92d2a450bb1211dece3582549a26a200edd3fe3b[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 17 11:54:14 2025 +0530
+
+    Refactor orchestrator for improved task execution and state management. Update API routes for workflow execution and enhance README with project layout details. Add Kafka support for asynchronous processing.
+
+[33mcommit d60a6b541bc4204f0d62c6addb72ab07718b69fd[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Wed Dec 17 11:50:37 2025 +0530
+
+    Update project structure and orchestrator implementation. Enhanced README with detailed project layout and added new executors. Refactored orchestrator to improve task execution and state management. Updated API routes for workflow execution and added Kafka support for asynchronous processing.
+
+[33mcommit 3a738dbeff53af7aa207498e9b8050556d9cc779[m
+Author: bobatea <parthigadher@gmail.com>
+Date:   Tue Dec 9 20:42:12 2025 +0530
+
+    Initial commit
