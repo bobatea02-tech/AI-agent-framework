@@ -1,0 +1,9 @@
+openvino>=2023.0.0
+openvino-dev>=2023.0.0
+torch>=1.13.0
+onnx>=1.13.0
+pytesseract
+numpy
+matplotlib
+psutil
+onnxscript
