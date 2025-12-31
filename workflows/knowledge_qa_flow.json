@@ -4,17 +4,21 @@
     {
       "id": "retrieve",
       "executor": "RAGRetrieverExecutor",
-      "inputs": { "query": "${__input__.query}" }
+      "inputs": {
+        "query": "${__input__.query}"
+      }
     },
     {
       "id": "answer",
       "executor": "LLMExecutor",
       "inputs": {
         "context": "${retrieve}",
-        "query": "${__input__.query}"
+        "query": "${__input__.query}",
+        "task_type": "completion"
       },
-      "depends_on": ["retrieve"]
+      "depends_on": [
+        "retrieve"
+      ]
     }
   ]
 }
-

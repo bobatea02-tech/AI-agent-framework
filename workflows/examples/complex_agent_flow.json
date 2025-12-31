@@ -1,0 +1,60 @@
+{
+    "workflow_id": "complex_agent_flow_v1",
+    "description": "End-to-end flow: OCR -> Classify -> Extract -> Validate -> Persist (Mock DB)",
+    "tasks": [
+        {
+            "id": "ocr_step",
+            "executor": "OcrExecutor",
+            "inputs": {
+                "document": "${__input__.document_path}"
+            },
+            "retry": 2
+        },
+        {
+            "id": "classify_step",
+            "executor": "LLMExecutor",
+            "inputs": {
+                "task_type": "classify",
+                "text": "${ocr_step.text}"
+            },
+            "depends_on": [
+                "ocr_step"
+            ]
+        },
+        {
+            "id": "extract_step",
+            "executor": "LLMExecutor",
+            "inputs": {
+                "task_type": "extract",
+                "text": "${ocr_step.text}",
+                "document_type": "${classify_step.document_type}"
+            },
+            "depends_on": [
+                "classify_step"
+            ]
+        },
+        {
+            "id": "validation_step",
+            "executor": "ValidationExecutor",
+            "inputs": {
+                "data": "${extract_step}"
+            },
+            "depends_on": [
+                "extract_step"
+            ]
+        },
+        {
+            "id": "persist_step",
+            "executor": "DatabaseExecutor",
+            "config": {
+                "model_class": "MockModel"
+            },
+            "inputs": {
+                "payload": "${extract_step}"
+            },
+            "depends_on": [
+                "validation_step"
+            ]
+        }
+    ]
+}

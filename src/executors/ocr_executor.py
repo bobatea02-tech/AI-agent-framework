@@ -18,7 +18,9 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OcrExecutor")
 
-class OcrExecutor:
+from src.executors.base import BaseExecutor
+
+class OcrExecutor(BaseExecutor):
     def __init__(self, config=None):
         self.config = config or {}
         self.use_openvino = self.config.get("USE_OPENVINO", False)
@@ -34,6 +36,22 @@ class OcrExecutor:
                 self.use_openvino = False
             else:
                 self._load_openvino_model()
+
+    def execute(self, config: dict, inputs: dict) -> dict:
+        """
+        Execute the OCR task.
+        
+        Args:
+            config: Task configuration
+            inputs: Input data containing 'document' which is the image to process
+            
+        Returns:
+            Dictionary containing extraction results
+        """
+        if "document" not in inputs:
+            raise ValueError("Input 'document' is required for OcrExecutor")
+            
+        return self.extract(inputs["document"])
 
     def _load_openvino_model(self):
         try:
