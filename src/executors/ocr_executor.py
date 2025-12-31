@@ -16,9 +16,9 @@ except ImportError:
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("OcrExecutor")
+logger = logging.getLogger("OCRExecutor")
 
-class OcrExecutor:
+class OCRExecutor:
     def __init__(self, config=None):
         self.config = config or {}
         self.use_openvino = self.config.get("USE_OPENVINO", False)
@@ -134,10 +134,10 @@ class OcrExecutor:
 if __name__ == "__main__":
     # Simple test
     print("Initializing Standard Executor...")
-    exec_std = OcrExecutor(config={"USE_OPENVINO": False})
+    exec_std = OCRExecutor(config={"USE_OPENVINO": False})
     print(exec_std.extract("dummy_img"))
 
     print("\nInitializing OpenVINO Executor...")
     # Ensure raw model exists from previous steps or use dummy path
-    exec_ov = OcrExecutor(config={"USE_OPENVINO": True})
+    exec_ov = OCRExecutor(config={"USE_OPENVINO": True})
     print(exec_ov.extract("dummy_img"))
