@@ -18,7 +18,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OCRExecutor")
 
-class OcrExecutor:
+class OCRExecutor:
     def __init__(self, config=None):
         self.config = config or {}
         self.use_openvino = self.config.get("USE_OPENVINO", False)

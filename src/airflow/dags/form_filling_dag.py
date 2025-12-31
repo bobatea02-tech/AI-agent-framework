@@ -12,6 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.models import Variable
+from airflow.models.param import Param
 
 from src.executors.ocr_executor import OCRExecutor
 from src.executors.llm_executor import LLMExecutor
@@ -55,16 +56,23 @@ def update_execution_status(execution_id: str, status: str, output: Dict = None,
         logger.error(f"Failed to update execution status: {e}")
 
 def extract_text_ocr(ti, **context):
+    # Merge params and conf, preferring conf if available, falling back to params
+    params = context.get('params', {})
     conf = context.get('dag_run').conf or {}
-    execution_id = conf.get('execution_id')
-    documents = conf.get('documents', [])
+    
+    execution_id = conf.get('execution_id') or params.get('execution_id')
+    documents = conf.get('documents') or params.get('documents') or []
     
     if execution_id:
         update_execution_status(execution_id, 'running')
     
     executor = OCRExecutor()
     # Input expected by OCRExecutor: {"documents": [...]}
-    result = executor.run_with_monitoring({"documents": documents})
+    if not documents:
+        raise ValueError("No documents provided")
+    
+    # Take the first document for processing
+    result = executor.run_with_monitoring({"document": documents[0]})
     
     if result.get("status") == "failed":
         if execution_id:
@@ -163,7 +171,11 @@ with DAG(
     schedule_interval=None,
     max_active_runs=10,
     tags=['agent', 'form-filling'],
-    catchup=False
+    catchup=False,
+    params={
+        "documents": Param(["/opt/airflow/src/sample_form.png"], type="array", description="List of document paths"),
+        "execution_id": Param(f"manual_run_{datetime.now().strftime('%Y%m%d%H%M%S')}", type="string", description="Unique execution ID"),
+    }
 ) as dag:
 
     task_ocr = PythonOperator(
