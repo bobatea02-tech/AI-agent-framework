@@ -6,20 +6,24 @@
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-7.6-black)
 ![License](https://img.shields.io/badge/License-MIT-purple)
 
-A production-ready framework for orchestrating intelligent AI agents. This SDK enables the creation and execution of complex, multi-step workflows involving LLM reasoning, document processing, and stateful interactions.
+**A production-ready framework for orchestrating intelligent AI agents.**
 
-## 🚀 Features
+This SDK enables the creation and execution of complex, multi-step workflows involving LLM reasoning, document processing, and stateful interactions. It is designed to be scalable, reliable, and observable.
 
-- **Workflow Orchestration**: Define complex task flows using JSON/YAML and execute them reliability.
-- **Intelligent Agents**: Build agents with specialized capabilities (OCR, RAG, Form Filling).
-- **Scalable Architecture**: Event-driven design using Apache Kafka and Apache Airflow.
-- **State Management**: Robust state persistence with Redis and PostgreSQL.
-- **Observability**: Built-in structured logging and Prometheus metrics.
-- **Developer Experience**: Comprehensive API, typed SDK, and easy deployment.
+---
+
+## 🚀 Key Features
+
+*   **Workflow Orchestration**: Define complex task flows using JSON/YAML and execute them reliably with Apache Airflow or a lightweight local orchestrator.
+*   **Intelligent Executors**: Built-in modules for LLM reasoning (OpenAI/Ollama), OCR (Tesseract), Data Validation, and API interactions.
+*   **Scalable Architecture**: Event-driven design utilizing Apache Kafka for asynchronous processing and Celery for distributed task execution.
+*   **Robust State Management**: Persist execution state, intermediate outputs, and history using Redis and PostgreSQL.
+*   **Observability**: Integrated structured logging and Prometheus metrics for real-time monitoring.
+*   **Developer Experience**: Typed SDK (Pydantic), comprehensive REST API, and easy containerized deployment.
 
 ## 🏗️ Architecture
 
-The framework follows a modular, event-driven architecture:
+The framework follows a modular, event-driven architecture designed for high throughput and reliability.
 
 ```mermaid
 graph TD
@@ -33,24 +37,28 @@ graph TD
     Executor -->|Data Access| DB[Database Executor]
     
     Worker -->|Persist State| Redis[(Redis)]
-    Worker -->|Store History| Postgres[(PostgreSQL)]
+    Worker -->|Save History| Postgres[(PostgreSQL)]
     
-    Airflow[Apache Airflow] -->|Schedule| API
+    Airflow[Apache Airflow] -->|Schedule/Trigger| API
 ```
 
-## 📋 Prerequisites
+[Read more in the detailed Architecture Guide →](docs/ARCHITECTURE.md)
 
-- **Docker** and **Docker Compose** (v2+)
-- **Python 3.10+** (for local development)
-- **Git**
+## 🏁 Quick Start (5 Minutes)
 
-## 🏁 Quick Start
+Get the framework running locally using the automated startup script.
 
-The easiest way to get started is using the included startup script, which handles validaton and orchestration of all services.
+### Prerequisites
+
+*   **Docker** & **Docker Compose** (v2+)
+*   **Git**
+*   **Python 3.10+** (for local CLI usage)
+
+### Installation
 
 1.  **Clone the repository**:
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/your-org/ai-agent-framework.git
     cd ai-agent-framework
     ```
 
@@ -58,135 +66,55 @@ The easiest way to get started is using the included startup script, which handl
     ```bash
     ./scripts/startup.sh
     ```
-    This script will:
-    *   Create `.env` from template (if missing).
-    *   Initialize Docker containers (Postgres, Redis, Kafka, Zookeeper, API, Airflow).
-    *   Wait for health checks.
-    *   Initialize the database and Kafka topics.
+    *This script initializes configuration, builds Docker images, starts services (Postgres, Redis, Kafka, API, Airflow), and runs health checks.*
 
-3.  **Access the Services**:
-    *   **API**: [http://localhost:8000](http://localhost:8000)
-    *   **Airflow UI**: [http://localhost:8080](http://localhost:8080) (user: `admin`, pass: `admin`)
-    *   **MinIO**: [http://localhost:9001](http://localhost:9001)
-    *   **Prometheus**: [http://localhost:9090](http://localhost:9090)
-    *   **Grafana**: [http://localhost:3000](http://localhost:3000)
+3.  **Access the Dashboard**:
+    *   **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+    *   **Airflow UI**: [http://localhost:8080](http://localhost:8080) (User/Pass: `admin`/`admin`)
 
-## 🛠️ Manual Setup
+### Run an Example Workflow
 
-If you prefer to run commands manually:
+Submit a simple "Knowledge Q&A" workflow via the API:
 
-1.  **Environment Setup**:
-    ```bash
-    cp .env.example .env
-    # Edit .env and set AIRFLOW_UID if on Linux: AIRFLOW_UID=$(id -u)
-    ```
-
-2.  **Start Infrastructure**:
-    ```bash
-    docker compose up -d postgres redis zookeeper kafka
-    ```
-
-3.  **Start Application**:
-    ```bash
-    docker compose up -d api airflow-webserver airflow-scheduler airflow-worker
-    ```
-
-4.  **Initialize**:
-    ```bash
-    # Init Database
-    docker compose exec api python -m src.database.init_db
-    
-    # Create Topics
-    docker compose exec kafka kafka-topics --create --topic workflows --bootstrap-server localhost:9092
-    ```
-
-## 📖 API Documentation
-
-The REST API is built with FastAPI. Interactive documentation is available at:
-
-*   **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-*   **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-### Common Endpoints
-
-**Submit a Workflow**
 ```bash
 curl -X POST "http://localhost:8000/api/v1/workflows" \
   -H "Content-Type: application/json" \
   -d '{
     "workflow_id": "knowledge_qa_v1",
     "input": {
-        "query": "What are the requirements?"
+        "query": "What are the capabilities of this framework?"
     }
   }'
 ```
 
-**Check Status**
-```bash
-curl "http://localhost:8000/api/v1/workflows/{execution_id}"
+Returns:
+```json
+{"execution_id": "550e8400-e29b-41d4-a716-446655440000", "status": "QUEUED"}
 ```
 
-**List Agents**
-```bash
-curl "http://localhost:8000/api/v1/agents"
-```
+## 📚 Documentation
 
-## 🧪 Testing
+*   **[Architecture Overview](docs/ARCHITECTURE.md)**: Deep dive into components, data flow, and design choices.
+*   **[API Reference](docs/API_REFERENCE.md)**: Complete guide to REST endpoints, schemas, and usage.
+*   **[Creating Agents](docs/CREATING_AGENTS.md)**: Tutorial on building custom agents, defining workflows, and writing executors.
+*   **[Deployment Guide](docs/DEPLOYMENT.md)**: Instructions for Docker Compose, Kubernetes, and Cloud deployment.
+*   **[Troubleshooting](docs/TROUBLESHOOTING.md)**: Solutions for common issues and debugging tips.
+*   **[Development Guide](docs/DEVELOPMENT.md)**: How to set up a dev environment, run tests, and contribute.
 
-Run the test suite to verify the framework:
+## 🛠️ Technology Stack
 
-```bash
-# Install test dependencies
-pip install -r requirements.txt
-
-# Run unit tests
-pytest tests/unit
-
-# Run full suite (requires running infrastructure)
-pytest tests/
-```
-
-### Standalone Verification
-Specific components can be verified using scripts in `scripts/`:
-*   `python scripts/verify_task_flow_parser.py`: Verify workflow parsing logic.
-*   `python scripts/verify_state_manager.py`: Verify Redis state persistence.
-
-## 📂 Project Structure
-
-```
-ai-agent-framework/
-├── src/
-│   ├── api/            # FastAPI routes and schemas
-│   ├── core/           # Core logic (Orchestrator, TaskFlow, StateManager)
-│   ├── database/       # DB models and connection
-│   ├── executors/      # Task execution modules (LLM, OCR, etc.)
-│   └── kafka/          # Message queue handlers
-├── workflows/          # JSON workflow definitions
-├── scripts/            # Helper scripts (startup, verification)
-├── tests/              # Unit and integration tests
-├── docker-compose.yml  # Infrastructure definition
-└── README.md           # This file
-```
-
-## ❓ Troubleshooting
-
-**Issue**: `ModuleNotFoundError: No module named 'src'`
-*   **Fix**: Ensure you run python commands from the project root, e.g., `python -m src.main`.
-
-**Issue**: Kafka connection failed.
-*   **Fix**: Ensure Zookeeper is running first. Use `startup.sh` which handles start order.
-
-**Issue**: Airflow permission errors on Linux.
-*   **Fix**: Ensure `AIRFLOW_UID` is set in `.env` matching your user ID (`id -u`).
+*   **Language**: Python 3.10+
+*   **API**: FastAPI
+*   **Orchestration**: Apache Airflow, Custom Python Engine
+*   **Messaging**: Apache Kafka, Celery
+*   **Storage**: PostgreSQL (SQLAlchemy), Redis
+*   **AI/ML**: OpenAI API, Ollama, Tesseract OCR, LangChain (internal)
+*   **Infrastructure**: Docker, Docker Compose
 
 ## 🤝 Contributing
 
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes (`git commit -m 'Add amazing feature'`).
-4.  Push to the branch (`git push origin feature/amazing-feature`).
-5.  Open a Pull Request.
+We welcome contributions! Please see the [Development Guide](docs/DEVELOPMENT.md) for details on how to set up your environment and submit pull requests.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the `LICENSE` file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

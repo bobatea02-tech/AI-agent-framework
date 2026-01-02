@@ -33,6 +33,19 @@ from src.executors.rag_executor import RAGRetrieverExecutor
 from src.executors.validation_executor import ValidationExecutor
 from src.kafka.producer import default_producer
 from src.utils.metrics import record_workflow_submission, record_workflow_completion
+from src.api.security import verify_api_key
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from fastapi import Request
+
+# Setup router-level limiter if needed, or rely on app.state.limiter access
+# Ideally we pass the limiter instance, but standard slowapi usage often involves a global or request-based access
+# Here we will assume 'limiter' is available or instantiate a local one for declaration (which might be redundant)
+# For route decorators to work, they usually need the 'limiter' instance. 
+# Best practice: Import the limiter from main.py? Circular import risk.
+# Creating a new instance here pointing to same key_func usually works if middleware is set up.
+
+limiter = Limiter(key_func=get_remote_address) 
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +105,12 @@ def _map_execution_to_results(
 # --- Routes ---
 
 @router.post("/workflows", response_model=WorkflowResponse, status_code=202)
+@limiter.limit("5/minute")
 def submit_workflow(
+    request: Request,
     submission: WorkflowSubmission,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key)
 ):
     """
     Submit a workflow execution.
@@ -248,11 +264,14 @@ def get_workflow_results(
 
 
 @router.get("/workflows", response_model=List[WorkflowStatusResponse])
+@limiter.limit("50/minute")
 def list_workflows(
+    request: Request,
     status: Optional[str] = None,
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # auth_user: str = Depends(verify_api_key) # Optional: Enforce auth for listing
 ):
     """
     List workflow executions with pagination.

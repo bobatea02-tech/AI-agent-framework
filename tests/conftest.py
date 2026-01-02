@@ -101,3 +101,19 @@ def mock_openai_response():
     mock_response.choices = [mock_choice]
     
     return mock_response
+
+@pytest.fixture(scope="function")
+def mock_kafka_producer():
+    """
+    Mocks the Kafka producer to verify publishing without actual broker.
+    """
+    with patch("src.api.routes.kafka_producer") as mock:
+        yield mock
+
+@pytest.fixture(scope="function")
+def mock_s3_client():
+    """
+    Mocks boto3 S3 client for checking file uploads/downloads.
+    """
+    with patch("boto3.client") as mock:
+        yield mock.return_value

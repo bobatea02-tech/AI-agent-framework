@@ -1,0 +1,63 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ai_agent_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov httpx
+        
+    - name: Run Unit Tests
+      run: |
+        pytest tests/unit/ --junitxml=reports/unit-results.xml
+        
+    - name: Run Integration Tests
+      run: |
+        pytest tests/integration/ --junitxml=reports/integration-results.xml
+        
+    - name: Generate Coverage Report
+      run: |
+        pytest --cov=src tests/unit tests/integration --cov-report=xml
+        
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: reports/*.xml

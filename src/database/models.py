@@ -93,3 +93,17 @@ class AgentDefinition(Base):
 
     # Relationships
     workflow_definition = relationship("WorkflowDefinition", back_populates="agents")
+
+
+class ModelOptimization(Base):
+    __tablename__ = 'model_optimizations'
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_name = Column(String, nullable=False)
+    framework = Column(String, nullable=False) # OpenVINO, Tesseract, etc.
+    precision = Column(String) # FP32, FP16, INT8
+    latency_ms = Column(Float)
+    throughput_rps = Column(Float)
+    cpu_usage_percent = Column(Float)
+    memory_usage_mb = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
