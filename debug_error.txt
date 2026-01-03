@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "D:\AI-agent-framework\manual_debug.py", line 32, in <module>
-    from src.api.main import app
-  File "D:\AI-agent-framework\src\api\main.py", line 12, in <module>
-    from src.utils.logger import setup_logging, get_logger
-  File "D:\AI-agent-framework\src\utils\logger.py", line 8, in <module>
-    from structlog.stdlib import LoggerFactory
-ModuleNotFoundError: No module named 'structlog.stdlib'; 'structlog' is not a package
