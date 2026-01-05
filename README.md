@@ -1,4 +1,4 @@
-# 🤖 AI Agent Framework (SDK)
+# 🤖 NeuroFlow (AI Agent Framework (SDK))
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green)
